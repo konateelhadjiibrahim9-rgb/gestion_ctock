@@ -1044,6 +1044,8 @@ function openAddExemplaireModal() {
     document.getElementById('exemplaireForm').reset();
     document.getElementById('exemplaireNumSerie').value = '';
     document.getElementById('exemplaireNumSerieInput').disabled = false;
+    document.getElementById('exemplaireNumSerieInput').classList.remove('bg-gray-100', 'cursor-not-allowed');
+    document.getElementById('exemplaireSerialHint').classList.add('hidden');
 
     // Charger les produits dans le select
     loadProduitsForSelect();
@@ -1060,6 +1062,8 @@ function editExemplaire(numSerie) {
     document.getElementById('exemplaireNumSerie').value = exemplaire.num_serie;
     document.getElementById('exemplaireNumSerieInput').value = exemplaire.num_serie;
     document.getElementById('exemplaireNumSerieInput').disabled = true; // Pas modifiable
+    document.getElementById('exemplaireNumSerieInput').classList.add('bg-gray-100', 'cursor-not-allowed');
+    document.getElementById('exemplaireSerialHint').classList.remove('hidden');
 
     loadProduitsForSelect(exemplaire.id_produit);
 
