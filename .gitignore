@@ -21,6 +21,10 @@ Thumbs.db
 dist/
 build/
 
-# Uploads (keep .gitkeep)
-uploads/*
-!uploads/.gitkeep
+# Uploads (keep .gitkeep if exists)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
