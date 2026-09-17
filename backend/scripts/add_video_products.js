@@ -14,6 +14,11 @@ const products = [
   }
 ];
 
+function salePrice(purchasePrice) {
+  const purchase = Number(purchasePrice) || 0;
+  return purchase <= 0 ? 0 : Math.round(purchase * (purchase <= 100000 ? 1.4 : 1.25));
+}
+
 async function addProducts() {
   const connection = await db.getConnection();
   try {
@@ -29,7 +34,7 @@ async function addProducts() {
 
       const [result] = await connection.query(
         'INSERT INTO produits (code_produit, nom, description, prix_achat, prix_vente, image_url, images_galerie) VALUES (?, ?, ?, ?, ?, NULL, NULL)',
-        [`PROD-${String((await nextProductId(connection))).padStart(2, '0')}`, product.nom, product.description, 0, product.prix_vente]
+        [`PROD-${String((await nextProductId(connection))).padStart(2, '0')}`, product.nom, product.description, product.prix_vente, salePrice(product.prix_vente)]
       );
       const idProduit = result.insertId;
       const code = `PROD-${String(idProduit).padStart(2, '0')}`;

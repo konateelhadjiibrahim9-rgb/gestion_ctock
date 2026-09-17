@@ -55,6 +55,11 @@ function slug(value) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase();
 }
 
+function salePrice(purchasePrice) {
+  const purchase = Number(purchasePrice) || 0;
+  return purchase <= 0 ? 0 : Math.round(purchase * (purchase <= 100000 ? 1.4 : 1.25));
+}
+
 async function addListingProducts() {
   const connection = await db.getConnection();
   try {
@@ -66,8 +71,8 @@ async function addListingProducts() {
       const [sameFamily] = await connection.query('SELECT id_produit, nom FROM produits');
       if (sameFamily.some(product => slug(product.nom) === slug(nom))) continue;
       const [result] = await connection.query(
-        'INSERT INTO produits (code_produit, nom, description, prix_achat, prix_vente, image_url, images_galerie) VALUES (?, ?, ?, 0, ?, NULL, NULL)',
-        ['TEMP', nom, description, price]
+        'INSERT INTO produits (code_produit, nom, description, prix_achat, prix_vente, image_url, images_galerie) VALUES (?, ?, ?, ?, ?, NULL, NULL)',
+        ['TEMP', nom, description, price, salePrice(price)]
       );
       const code = `PROD-${String(result.insertId).padStart(2, '0')}`;
       await connection.query('UPDATE produits SET code_produit = ? WHERE id_produit = ?', [code, result.insertId]);

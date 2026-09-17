@@ -96,7 +96,7 @@ function parseProductInfo(text, docxFileName) {
       if (prix) info.prix_vente = parsePrice(prix[0]);
     } else if (lowerLine.includes('prix')) {
       const prix = line.match(/[\d.,]+/);
-      if (prix) info.prix_vente = parsePrice(prix[0]);
+      if (prix) info.prix_achat = parsePrice(prix[0]);
     } else if (/^(série|serie|serial|code)\s*[:\-]/i.test(normalizedLine)) {
       info.numero_serie = line.split(/:|-/).pop().trim();
     } else if (/^(quantité|quantite|stock|nombre)\s*[:\-]/i.test(normalizedLine)) {
@@ -129,6 +129,12 @@ function parseProductInfo(text, docxFileName) {
 function parsePrice(value) {
   const normalized = String(value).replace(/\s/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.');
   return Number.parseFloat(normalized) || 0;
+}
+
+function calculateSalePrice(purchasePrice) {
+  const purchase = Number(purchasePrice) || 0;
+  if (purchase <= 0) return 0;
+  return Math.round(purchase * (purchase <= 100000 ? 1.4 : 1.25));
 }
 
 // Fonction pour copier une image dans le dossier uploads
@@ -190,12 +196,13 @@ async function insertProduct(productInfo, imageUrl, imagesGalerie) {
   const sql = `INSERT INTO produits (code_produit, nom, description, prix_achat, prix_vente, image_url, images_galerie)
                VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
+  const purchasePrice = productInfo.prix_achat || 0;
   const result = await executeMySQL(sql, [
     productInfo.code_produit,
     productInfo.nom,
     productInfo.description,
-    productInfo.prix_achat || 0,
-    productInfo.prix_vente || 0,
+    purchasePrice,
+    productInfo.prix_vente || calculateSalePrice(purchasePrice),
     imageUrl || null,
     imagesGalerie ? JSON.stringify(imagesGalerie) : null
   ]);
