@@ -8,6 +8,9 @@ router.get('/', produitsController.getAllProduits);
 // GET /api/produits/:id_produit - Obtenir un produit spécifique
 router.get('/:id_produit', produitsController.getProduitById);
 
+// POST /api/produits/match-search - Recherche intelligente par texte
+router.post('/match-search', produitsController.matchSearch);
+
 // POST /api/produits - Ajouter un nouveau produit (avec upload d'image)
 router.post('/', produitsController.createProduit);
 

@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const path = require('path');
 const fs = require('fs').promises;
+const { matchProducts } = require('../services/searchMatcher');
 
 // Fonction utilitaire pour supprimer un fichier de manière sécurisée
 async function deleteImageFile(imageUrl) {
@@ -26,7 +27,13 @@ async function deleteImageFile(imageUrl) {
 // GET /api/produits - Lister tous les produits
 exports.getAllProduits = async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM produits ORDER BY nom');
+    const [rows] = await db.query(`
+      SELECT p.*, COUNT(CASE WHEN e.statut = 'En stock' THEN 1 END) AS stock_disponible
+      FROM produits p
+      LEFT JOIN exemplaires e ON e.id_produit = p.id_produit
+      GROUP BY p.id_produit
+      ORDER BY p.nom
+    `);
     res.json(rows);
   } catch (error) {
     console.error('Erreur lors de la récupération des produits:', error);
@@ -52,14 +59,46 @@ exports.getProduitById = async (req, res) => {
   }
 };
 
+// POST /api/produits/match-search - Rechercher des produits depuis un listing libre
+exports.matchSearch = async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ error: 'Le texte à analyser est requis' });
+    }
+
+    const [products] = await db.query(`
+            SELECT p.*,
+              COUNT(CASE WHEN e.statut = 'En stock' THEN 1 END) AS stock_disponible,
+              MIN(CASE WHEN e.statut = 'En stock' THEN e.num_serie END) AS num_serie_disponible
+      FROM produits p
+      LEFT JOIN exemplaires e ON e.id_produit = p.id_produit
+      GROUP BY p.id_produit
+      ORDER BY p.nom
+    `);
+    const availableProducts = products.filter(product => Number(product.stock_disponible) > 0);
+
+    res.json({
+      results: matchProducts(text, availableProducts),
+      productsAnalyzed: availableProducts.length
+    });
+  } catch (error) {
+    console.error('Erreur lors de la recherche intelligente:', error);
+    res.status(500).json({ error: 'Erreur serveur lors de l’analyse' });
+  }
+};
+
 // POST /api/produits - Ajouter un nouveau produit
 exports.createProduit = async (req, res) => {
   try {
-    const { code_produit, nom, description, prix_achat, prix_vente } = req.body;
+    const { nom, description, prix_achat, prix_vente, images_galerie } = req.body;
     
-    if (!code_produit || !nom) {
-      return res.status(400).json({ error: 'Code produit et nom sont requis' });
+    if (!nom) {
+      return res.status(400).json({ error: 'Le nom du produit est requis' });
     }
+
+    const [lastProduct] = await db.query('SELECT COALESCE(MAX(id_produit), 0) + 1 AS next_id FROM produits');
+    const code_produit = `PROD-${String(lastProduct[0].next_id).padStart(2, '0')}`;
 
     // Gérer l'image si elle est fournie
     let image_url = null;
@@ -68,8 +107,8 @@ exports.createProduit = async (req, res) => {
     }
 
     const [result] = await db.query(
-      'INSERT INTO produits (code_produit, nom, description, prix_achat, prix_vente, image_url) VALUES (?, ?, ?, ?, ?, ?)',
-      [code_produit, nom, description, prix_achat, prix_vente, image_url]
+      'INSERT INTO produits (code_produit, nom, description, prix_achat, prix_vente, image_url, images_galerie) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [code_produit, nom, description, prix_achat, prix_vente, image_url, images_galerie ? JSON.stringify(images_galerie) : null]
     );
 
     res.status(201).json({ 
@@ -79,7 +118,8 @@ exports.createProduit = async (req, res) => {
       description, 
       prix_achat, 
       prix_vente,
-      image_url
+      image_url,
+      images_galerie
     });
   } catch (error) {
     console.error('Erreur lors de la création du produit:', error);
@@ -91,7 +131,7 @@ exports.createProduit = async (req, res) => {
 exports.updateProduit = async (req, res) => {
   try {
     const { id_produit } = req.params;
-    const { code_produit, nom, description, prix_achat, prix_vente } = req.body;
+    const { code_produit, nom, description, prix_achat, prix_vente, images_galerie } = req.body;
     
     if (!code_produit || !nom) {
       return res.status(400).json({ error: 'Code produit et nom sont requis' });
@@ -114,8 +154,8 @@ exports.updateProduit = async (req, res) => {
     }
 
     const [result] = await db.query(
-      'UPDATE produits SET code_produit = ?, nom = ?, description = ?, prix_achat = ?, prix_vente = ?, image_url = ? WHERE id_produit = ?',
-      [code_produit, nom, description, prix_achat, prix_vente, image_url, id_produit]
+      'UPDATE produits SET code_produit = ?, nom = ?, description = ?, prix_achat = ?, prix_vente = ?, image_url = ?, images_galerie = ? WHERE id_produit = ?',
+      [code_produit, nom, description, prix_achat, prix_vente, image_url, images_galerie ? JSON.stringify(images_galerie) : null, id_produit]
     );
 
     if (result.affectedRows === 0) {
@@ -129,7 +169,8 @@ exports.updateProduit = async (req, res) => {
       description, 
       prix_achat, 
       prix_vente,
-      image_url
+      image_url,
+      images_galerie
     });
   } catch (error) {
     console.error('Erreur lors de la modification du produit:', error);
@@ -143,7 +184,7 @@ exports.deleteProduit = async (req, res) => {
     const { id_produit } = req.params;
     
     // Vérifier si le produit existe
-    const [existing] = await db.query('SELECT id_produit, image_url FROM produits WHERE id_produit = ?', [id_produit]);
+    const [existing] = await db.query('SELECT id_produit, image_url, images_galerie FROM produits WHERE id_produit = ?', [id_produit]);
     if (existing.length === 0) {
       return res.status(404).json({ error: 'Produit non trouvé' });
     }
@@ -160,6 +201,14 @@ exports.deleteProduit = async (req, res) => {
     // Supprimer le fichier image associé si présent
     if (existing[0].image_url) {
       await deleteImageFile(existing[0].image_url);
+    }
+    if (existing[0].images_galerie) {
+      const gallery = typeof existing[0].images_galerie === 'string'
+        ? JSON.parse(existing[0].images_galerie)
+        : existing[0].images_galerie;
+      for (const imageUrl of gallery || []) {
+        if (imageUrl !== existing[0].image_url) await deleteImageFile(imageUrl);
+      }
     }
 
     const [result] = await db.query('DELETE FROM produits WHERE id_produit = ?', [id_produit]);

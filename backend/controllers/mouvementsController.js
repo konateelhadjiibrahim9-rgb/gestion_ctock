@@ -59,6 +59,53 @@ exports.enregistrerVente = async (req, res) => {
   }
 };
 
+// POST /api/mouvements/annuler-vente - Annuler une vente et remettre l'exemplaire en stock
+exports.annulerVente = async (req, res) => {
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+    const { num_serie, commentaire } = req.body;
+
+    if (!num_serie) {
+      await connection.rollback();
+      return res.status(400).json({ error: 'Numéro de série est requis' });
+    }
+
+    const [exemplaires] = await connection.query(
+      'SELECT num_serie, statut FROM exemplaires WHERE num_serie = ? FOR UPDATE',
+      [num_serie]
+    );
+
+    if (exemplaires.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Exemplaire non trouvé' });
+    }
+    if (exemplaires[0].statut !== 'Vendu') {
+      await connection.rollback();
+      return res.status(400).json({ error: 'Cet exemplaire n’est pas vendu' });
+    }
+
+    await connection.query(
+      'UPDATE exemplaires SET statut = ?, etat_physique = ? WHERE num_serie = ?',
+      ['En stock', 'Bon état', num_serie]
+    );
+    await connection.query(
+      'INSERT INTO mouvements_stock (num_serie, type_mouvement, commentaire) VALUES (?, ?, ?)',
+      [num_serie, 'Annulation vente', commentaire || 'Vente annulée - retour en stock']
+    );
+
+    await connection.commit();
+    res.json({ message: 'Vente annulée avec succès', num_serie, statut: 'En stock' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Erreur lors de l’annulation de la vente:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  } finally {
+    connection.release();
+  }
+};
+
 // POST /api/mouvements/reparation - Passer un appareil en réparation
 exports.envoyerReparation = async (req, res) => {
   const connection = await db.getConnection();

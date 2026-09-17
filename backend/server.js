@@ -51,6 +51,7 @@ const produitsController = require('./controllers/produitsController');
 // Produits routes avec upload middleware
 app.get('/api/produits', produitsController.getAllProduits);
 app.get('/api/produits/:id_produit', produitsController.getProduitById);
+app.post('/api/produits/match-search', produitsController.matchSearch);
 app.post('/api/produits', upload.single('image'), produitsController.createProduit);
 app.put('/api/produits/:id_produit', upload.single('image'), produitsController.updateProduit);
 app.delete('/api/produits/:id_produit', produitsController.deleteProduit);
