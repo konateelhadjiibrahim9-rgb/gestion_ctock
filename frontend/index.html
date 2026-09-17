@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion de Stock - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .status-en-stock {
+            background-color: #10b981;
+            color: white;
+        }
+        
+        .status-vendu {
+            background-color: #ef4444;
+            color: white;
+        }
+        
+        .status-en-reparation {
+            background-color: #f59e0b;
+            color: white;
+        }
+        
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .toast-success {
+            background-color: #10b981;
+        }
+        
+        .toast-error {
+            background-color: #ef4444;
+        }
+        
+        .tab-active {
+            border-bottom: 2px solid #667eea;
+            color: #667eea;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-boxes text-2xl"></i>
+                    <h1 class="text-xl font-bold">Gestion de Stock</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm opacity-75">API Status:</span>
+                    <span id="apiStatus" class="px-3 py-1 bg-white/20 rounded-full text-xs font-medium">
+                        <i class="fas fa-circle text-green-400 mr-1"></i> Connecté
+                    </span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="container mx-auto px-4">
+            <div class="flex space-x-8 overflow-x-auto">
+                <button onclick="showTab('dashboard')" id="tab-dashboard" class="py-4 px-2 text-sm font-medium tab-active whitespace-nowrap">
+                    <i class="fas fa-chart-line mr-2"></i>Tableau de Bord
+                </button>
+                <button onclick="showTab('produits')" id="tab-produits" class="py-4 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                    <i class="fas fa-box mr-2"></i>Produits
+                </button>
+                <button onclick="showTab('stock')" id="tab-stock" class="py-4 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                    <i class="fas fa-warehouse mr-2"></i>Stock
+                </button>
+                <button onclick="showTab('vente')" id="tab-vente" class="py-4 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                    <i class="fas fa-shopping-cart mr-2"></i>Vente
+                </button>
+                <button onclick="showTab('historique')" id="tab-historique" class="py-4 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                    <i class="fas fa-history mr-2"></i>Historique
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8">
+        
+        <!-- Dashboard Tab -->
+        <div id="dashboard-content" class="tab-content fade-in">
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">Tableau de Bord</h2>
+                <p class="text-gray-600">Vue d'ensemble de votre stock</p>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-white rounded-xl shadow-md p-6 card-hover transition-all duration-300">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-500 text-sm font-medium">Total Exemplaires</p>
+                            <p id="stat-total" class="text-3xl font-bold text-gray-800 mt-1">-</p>
+                        </div>
+                        <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-boxes text-blue-600 text-xl"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-md p-6 card-hover transition-all duration-300">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-500 text-sm font-medium">En Stock</p>
+                            <p id="stat-stock" class="text-3xl font-bold text-green-600 mt-1">-</p>
+                        </div>
+                        <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-check-circle text-green-600 text-xl"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-md p-6 card-hover transition-all duration-300">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-500 text-sm font-medium">Vendus</p>
+                            <p id="stat-vendus" class="text-3xl font-bold text-red-600 mt-1">-</p>
+                        </div>
+                        <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-shopping-cart text-red-600 text-xl"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-md p-6 card-hover transition-all duration-300">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-500 text-sm font-medium">En Réparation</p>
+                            <p id="stat-reparation" class="text-3xl font-bold text-orange-600 mt-1">-</p>
+                        </div>
+                        <div class="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-tools text-orange-600 text-xl"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-md p-6 card-hover transition-all duration-300">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-500 text-sm font-medium">Valeur Stock</p>
+                            <p id="stat-valeur" class="text-3xl font-bold text-purple-600 mt-1">-</p>
+                        </div>
+                        <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-dollar-sign text-purple-600 text-xl"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-md p-6 card-hover transition-all duration-300">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-500 text-sm font-medium">Ventes Totales</p>
+                            <p id="stat-ventes" class="text-3xl font-bold text-indigo-600 mt-1">-</p>
+                        </div>
+                        <div class="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-chart-line text-indigo-600 text-xl"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Actions Rapides</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <button onclick="showTab('vente')" class="flex flex-col items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                        <i class="fas fa-shopping-cart text-blue-600 text-2xl mb-2"></i>
+                        <span class="text-sm font-medium text-gray-700">Nouvelle Vente</span>
+                    </button>
+                    <button onclick="showTab('stock')" class="flex flex-col items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
+                        <i class="fas fa-search text-green-600 text-2xl mb-2"></i>
+                        <span class="text-sm font-medium text-gray-700">Rechercher</span>
+                    </button>
+                    <button onclick="showTab('historique')" class="flex flex-col items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
+                        <i class="fas fa-history text-purple-600 text-2xl mb-2"></i>
+                        <span class="text-sm font-medium text-gray-700">Historique</span>
+                    </button>
+                    <button onclick="refreshDashboard()" class="flex flex-col items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <i class="fas fa-sync-alt text-gray-600 text-2xl mb-2"></i>
+                        <span class="text-sm font-medium text-gray-700">Actualiser</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Produits Tab -->
+        <div id="produits-content" class="tab-content hidden fade-in">
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">Gestion des Produits</h2>
+                <p class="text-gray-600">Ajoutez, modifiez ou supprimez des produits</p>
+            </div>
+
+            <!-- Add Product Button -->
+            <div class="mb-6">
+                <button onclick="openAddProductModal()" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-medium hover:from-purple-700 hover:to-indigo-700 transition-all">
+                    <i class="fas fa-plus mr-2"></i>Ajouter un Produit
+                </button>
+            </div>
+
+            <!-- Products Table -->
+            <div class="bg-white rounded-xl shadow-md overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prix Achat</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prix Vente</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="produitsTableBody" class="divide-y divide-gray-200">
+                            <tr>
+                                <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                                    <div class="flex flex-col items-center">
+                                        <div class="loading-spinner mb-4"></div>
+                                        <p>Chargement des produits...</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stock Tab -->
+        <div id="stock-content" class="tab-content hidden fade-in">
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">Gestion du Stock</h2>
+                <p class="text-gray-600">Recherchez et filtrez vos exemplaires</p>
+            </div>
+
+            <!-- Search and Filter -->
+            <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+                <div class="flex flex-col md:flex-row gap-4">
+                    <div class="flex-1">
+                        <div class="relative">
+                            <input type="text" id="searchInput" placeholder="Rechercher par numéro de série ou nom de produit..." 
+                                   class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                   onkeyup="filterExemplaires()">
+                            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <select id="statusFilter" class="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" onchange="filterExemplaires()">
+                            <option value="">Tous les statuts</option>
+                            <option value="En stock">En stock</option>
+                            <option value="Vendu">Vendu</option>
+                            <option value="En réparation">En réparation</option>
+                        </select>
+                        <button onclick="loadExemplaires()" class="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                            <i class="fas fa-sync-alt mr-2"></i>Actualiser
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Exemplaires Table -->
+            <div class="bg-white rounded-xl shadow-md overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Numéro de Série</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produit</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">État Physique</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="exemplairesTableBody" class="divide-y divide-gray-200">
+                            <tr>
+                                <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                                    <div class="flex flex-col items-center">
+                                        <div class="loading-spinner mb-4"></div>
+                                        <p>Chargement des données...</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Add Exemplaire Button -->
+            <div class="mt-6">
+                <button onclick="openAddExemplaireModal()" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-medium hover:from-purple-700 hover:to-indigo-700 transition-all">
+                    <i class="fas fa-plus mr-2"></i>Ajouter un Exemplaire
+                </button>
+            </div>
+        </div>
+
+        <!-- Vente Tab -->
+        <div id="vente-content" class="tab-content hidden fade-in">
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">Vente Rapide</h2>
+                <p class="text-gray-600">Enregistrez une vente en scannant ou saisissant le numéro de série</p>
+            </div>
+
+            <div class="max-w-2xl mx-auto">
+                <div class="bg-white rounded-xl shadow-md p-8">
+                    <form id="venteForm" onsubmit="enregistrerVente(event)">
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Numéro de Série</label>
+                            <div class="relative">
+                                <input type="text" id="venteNumSerie" required
+                                       placeholder="Entrez ou scannez le numéro de série"
+                                       class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-lg">
+                                <i class="fas fa-barcode absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                            </div>
+                        </div>
+
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Commentaire (optionnel)</label>
+                            <textarea id="venteCommentaire" rows="3"
+                                      placeholder="Détails de la vente (client, prix, etc.)"
+                                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"></textarea>
+                        </div>
+
+                        <div id="ventePreview" class="hidden mb-6 p-4 bg-gray-50 rounded-lg">
+                            <h4 class="font-medium text-gray-800 mb-2">Aperçu du produit</h4>
+                            <div id="ventePreviewContent"></div>
+                        </div>
+
+                        <button type="submit" class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3 rounded-lg font-medium hover:from-purple-700 hover:to-indigo-700 transition-all transform hover:scale-[1.02]">
+                            <i class="fas fa-check-circle mr-2"></i>Valider la Vente
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Ventes Récentes -->
+                <div class="mt-8 bg-white rounded-xl shadow-md p-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Dernières Ventes</h3>
+                    <div id="recentVentes" class="space-y-3">
+                        <p class="text-gray-500 text-center py-4">Aucune vente récente</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Historique Tab -->
+        <div id="historique-content" class="tab-content hidden fade-in">
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">Historique & Traçabilité</h2>
+                <p class="text-gray-600">Consultez l'historique complet d'un exemplaire</p>
+            </div>
+
+            <div class="max-w-3xl mx-auto">
+                <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+                    <div class="flex gap-4">
+                        <div class="flex-1">
+                            <div class="relative">
+                                <input type="text" id="historiqueNumSerie" 
+                                       placeholder="Entrez le numéro de série"
+                                       class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                            </div>
+                        </div>
+                        <button onclick="searchHistorique()" class="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                            <i class="fas fa-search mr-2"></i>Rechercher
+                        </button>
+                    </div>
+                </div>
+
+                <div id="historiqueResult" class="hidden">
+                    <!-- Exemplaire Info -->
+                    <div id="exemplaireInfo" class="bg-white rounded-xl shadow-md p-6 mb-6"></div>
+                    
+                    <!-- Timeline -->
+                    <div class="bg-white rounded-xl shadow-md p-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Chronologie des Mouvements</h3>
+                        <div id="historiqueTimeline" class="space-y-4"></div>
+                    </div>
+                </div>
+
+                <div id="historiqueEmpty" class="text-center py-12">
+                    <i class="fas fa-history text-gray-300 text-6xl mb-4"></i>
+                    <p class="text-gray-500">Entrez un numéro de série pour voir son historique</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-6 mt-12">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-gray-400">© 2024 Gestion de Stock - Système de gestion de stock informatique</p>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div id="toastContainer"></div>
+
+    <!-- Modal: Add/Edit Product -->
+    <div id="productModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4">
+            <div class="flex items-center justify-between p-6 border-b">
+                <h3 id="productModalTitle" class="text-lg font-semibold text-gray-800">Ajouter un Produit</h3>
+                <button onclick="closeProductModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <form id="productForm" onsubmit="saveProduct(event)">
+                <div class="p-6 space-y-4">
+                    <input type="hidden" id="productId">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Code Produit</label>
+                        <input type="text" id="productCode" required
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Nom</label>
+                        <input type="text" id="productName" required
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                        <textarea id="productDescription" rows="3"
+                                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"></textarea>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Prix Achat</label>
+                            <input type="number" id="productPrixAchat" step="0.01"
+                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Prix Vente</label>
+                            <input type="number" id="productPrixVente" step="0.01"
+                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Image du produit</label>
+                        <input type="file" id="productImage" accept="image/*"
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        <p class="text-xs text-gray-500 mt-1">Formats acceptés: JPG, PNG, GIF (max 5MB)</p>
+                    </div>
+                    <div id="imagePreview" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Aperçu de l'image</label>
+                        <img id="imagePreviewImg" src="" alt="Aperçu" class="w-32 h-32 object-cover rounded-lg border border-gray-300">
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-3 p-6 border-t">
+                    <button type="button" onclick="closeProductModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                        Annuler
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                        Enregistrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Add/Edit Exemplaire -->
+    <div id="exemplaireModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4">
+            <div class="flex items-center justify-between p-6 border-b">
+                <h3 id="exemplaireModalTitle" class="text-lg font-semibold text-gray-800">Ajouter un Exemplaire</h3>
+                <button onclick="closeExemplaireModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <form id="exemplaireForm" onsubmit="saveExemplaire(event)">
+                <div class="p-6 space-y-4">
+                    <input type="hidden" id="exemplaireNumSerie">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Numéro de Série</label>
+                        <input type="text" id="exemplaireNumSerieInput" required
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Produit</label>
+                        <select id="exemplaireProduit" required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            <option value="">Sélectionner un produit</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Statut</label>
+                        <select id="exemplaireStatut"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            <option value="En stock">En stock</option>
+                            <option value="Vendu">Vendu</option>
+                            <option value="En réparation">En réparation</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">État Physique</label>
+                        <select id="exemplaireEtatPhysique"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            <option value="Neuf">Neuf</option>
+                            <option value="Occasion">Occasion</option>
+                            <option value="Réparé">Réparé</option>
+                            <option value="Vendu">Vendu</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-3 p-6 border-t">
+                    <button type="button" onclick="closeExemplaireModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                        Annuler
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                        Enregistrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Confirm Delete -->
+    <div id="confirmModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div class="p-6">
+                <div class="flex items-center mb-4">
+                    <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mr-4">
+                        <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-800">Confirmer la suppression</h3>
+                </div>
+                <p id="confirmMessage" class="text-gray-600 mb-6">Êtes-vous sûr de vouloir supprimer cet élément ?</p>
+                <div class="flex justify-end space-x-3">
+                    <button onclick="closeConfirmModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                        Annuler
+                    </button>
+                    <button id="confirmDeleteBtn" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                        Supprimer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

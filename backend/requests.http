@@ -1,0 +1,175 @@
+### API de Gestion de Stock - Fichier de tests
+### Utilisez ce fichier avec VS Code (extension REST Client) ou importez dans Postman
+
+@baseUrl = http://localhost:3000/api
+
+###############################################################################
+### PRODUITS
+###############################################################################
+
+### GET - Lister tous les produits
+GET {{baseUrl}}/produits
+
+### GET - Obtenir un produit spécifique
+GET {{baseUrl}}/produits/1
+
+### POST - Ajouter un nouveau produit
+POST {{baseUrl}}/produits
+Content-Type: application/json
+
+{
+  "code_produit": "HP-450",
+  "nom": "HP ProBook 450",
+  "description": "Intel i5 - 8GB RAM - 256GB SSD - 15.6 pouces",
+  "prix_achat": 50000,
+  "prix_vente": 60000
+}
+
+### PUT - Modifier un produit
+PUT {{baseUrl}}/produits/1
+Content-Type: application/json
+
+{
+  "code_produit": "DELL-3350",
+  "nom": "Dell Latitude 3350 Modifié",
+  "description": "Dual Core - RAM 4GB - SSD 128GB - 13.3 pouces - Clavier AZERTY",
+  "prix_achat": 45000,
+  "prix_vente": 58000
+}
+
+### DELETE - Supprimer un produit
+DELETE {{baseUrl}}/produits/2
+
+###############################################################################
+### EXEMPLAIRES
+###############################################################################
+
+### GET - Lister tous les exemplaires
+GET {{baseUrl}}/exemplaires
+
+### GET - Obtenir les détails d'un exemplaire par numéro de série
+GET {{baseUrl}}/exemplaires/DELL3350-001
+
+### POST - Ajouter un seul exemplaire
+POST {{baseUrl}}/exemplaires
+Content-Type: application/json
+
+{
+  "num_serie": "DELL3350-007",
+  "id_produit": 1,
+  "statut": "En stock",
+  "etat_physique": "Neuf"
+}
+
+### POST - Ajouter plusieurs exemplaires
+POST {{baseUrl}}/exemplaires
+Content-Type: application/json
+
+[
+  {
+    "num_serie": "DELL3350-008",
+    "id_produit": 1,
+    "statut": "En stock",
+    "etat_physique": "Neuf"
+  },
+  {
+    "num_serie": "DELL3350-009",
+    "id_produit": 1,
+    "statut": "En stock",
+    "etat_physique": "Neuf"
+  }
+]
+
+### PUT - Modifier un exemplaire
+PUT {{baseUrl}}/exemplaires/DELL3350-001
+Content-Type: application/json
+
+{
+  "statut": "En réparation",
+  "etat_physique": "Réparé"
+}
+
+### PUT - Modifier l'exemplaire avec changement de produit
+PUT {{baseUrl}}/exemplaires/DELL3350-001
+Content-Type: application/json
+
+{
+  "id_produit": 1,
+  "statut": "En stock",
+  "etat_physique": "Neuf"
+}
+
+### DELETE - Supprimer un exemplaire
+DELETE {{baseUrl}}/exemplaires/DELL3350-009
+
+###############################################################################
+### MOUVEMENTS
+###############################################################################
+
+### POST - Enregistrer une vente
+POST {{baseUrl}}/mouvements/vente
+Content-Type: application/json
+
+{
+  "num_serie": "DELL3350-001",
+  "commentaire": "Vente client Marie Dupont"
+}
+
+### POST - Envoyer en réparation
+POST {{baseUrl}}/mouvements/reparation
+Content-Type: application/json
+
+{
+  "num_serie": "DELL3350-002",
+  "commentaire": "Problème batterie"
+}
+
+### POST - Retour de réparation
+POST {{baseUrl}}/mouvements/retour-reparation
+Content-Type: application/json
+
+{
+  "num_serie": "DELL3350-002",
+  "commentaire": "Batterie remplacée",
+  "etat_physique": "Réparé"
+}
+
+### GET - Obtenir l'historique d'un numéro de série
+GET {{baseUrl}}/mouvements/historique/DELL3350-001
+
+###############################################################################
+### STATISTIQUES
+###############################################################################
+
+### GET - Obtenir le résumé du stock
+GET {{baseUrl}}/stats/stock-summary
+
+###############################################################################
+### TESTS D'ERREUR
+###############################################################################
+
+### POST - Vente d'un exemplaire déjà vendu (doit échouer)
+POST {{baseUrl}}/mouvements/vente
+Content-Type: application/json
+
+{
+  "num_serie": "DELL3350-001",
+  "commentaire": "Tentative de vente double"
+}
+
+### POST - Ajouter un exemplaire avec numéro de série existant (doit échouer)
+POST {{baseUrl}}/exemplaires
+Content-Type: application/json
+
+{
+  "num_serie": "DELL3350-001",
+  "id_produit": 1,
+  "statut": "En stock",
+  "etat_physique": "Neuf"
+}
+
+### DELETE - Supprimer un produit avec exemplaires liés (doit échouer)
+DELETE {{baseUrl}}/produits/1
+
+### GET - Exemplaire inexistant (doit retourner 404)
+GET {{baseUrl}}/exemplaires/NONEXISTANT-123
