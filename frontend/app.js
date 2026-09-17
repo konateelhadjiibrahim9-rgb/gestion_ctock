@@ -553,6 +553,10 @@ async function analyzeProductListing() {
             method: 'POST',
             body: JSON.stringify({ text })
         });
+        const matchedProducts = response.results.flatMap(result => [result.match, ...(result.alternatives || [])]).filter(Boolean);
+        const productsById = new Map(produitsData.map(product => [product.id_produit, product]));
+        matchedProducts.forEach(product => productsById.set(product.id_produit, product));
+        produitsData = [...productsById.values()];
         renderMatchingResults(response.results || []);
         status.textContent = `${response.productsAnalyzed || 0} produit(s) disponible(s) analysé(s).`;
     } catch (error) {
@@ -583,6 +587,7 @@ function renderMatchingResults(results) {
                     <p class="text-sm text-gray-600 mt-2 whitespace-pre-line line-clamp-2">${escapeHtml(product.description || 'Aucune description')}</p>
                     <div class="flex flex-wrap gap-3 mt-3">
                         <button onclick="showProductDetails(${product.id_produit})" class="text-sm text-purple-600 hover:text-purple-900"><i class="fas fa-eye mr-1"></i>Voir la fiche</button>
+                        <button onclick="editProduct(${product.id_produit})" class="text-sm text-blue-600 hover:text-blue-900"><i class="fas fa-edit mr-1"></i>Modifier</button>
                         ${product.num_serie_disponible ? `<button onclick="quickSale('${escapeHtml(product.num_serie_disponible)}')" class="text-sm text-green-600 hover:text-green-900"><i class="fas fa-cart-shopping mr-1"></i>Vente rapide</button>` : ''}
                     </div>
                 </div>
