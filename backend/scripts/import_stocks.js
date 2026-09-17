@@ -58,7 +58,8 @@ function parseProductInfo(text, docxFileName) {
     prix_achat: null,
     prix_vente: null,
     code_produit: '',
-    numero_serie: ''
+    numero_serie: '',
+    quantite: 1
   };
 
   const lines = text.split('\n').map(line => line.trim()).filter(line => line);
@@ -81,6 +82,9 @@ function parseProductInfo(text, docxFileName) {
       if (prix) info.prix_vente = parseFloat(prix[0].replace(',', '.'));
     } else if (line.toLowerCase().includes('série') || line.toLowerCase().includes('serial') || line.toLowerCase().includes('code')) {
       info.numero_serie = line.split(/:|-/).pop().trim();
+    } else if (line.toLowerCase().includes('quantité') || line.toLowerCase().includes('quantite') || line.toLowerCase().includes('stock') || line.toLowerCase().includes('nombre')) {
+      const qty = line.match(/[\d]+/);
+      if (qty) info.quantite = parseInt(qty[0]);
     }
   }
 
@@ -218,6 +222,7 @@ async function importStocks() {
     total: 0,
     success: 0,
     failed: 0,
+    totalExemplaires: 0,
     errors: []
   };
 
@@ -262,13 +267,13 @@ async function importStocks() {
         console.log(`   - Code: ${productInfo.code_produit}`);
         console.log(`   - Prix achat: ${productInfo.prix_achat || 'N/A'}`);
         console.log(`   - Prix vente: ${productInfo.prix_vente || 'N/A'}`);
-        console.log(`   - Numéro série: ${productInfo.numero_serie}`);
+        console.log(`   - Quantité: ${productInfo.quantite}`);
 
-        // Trouver et copier l'image
+        // Trouver et copier l'image principale
         const imagePath = await findFirstImage(folderPath);
         let imageUrl = null;
         if (imagePath) {
-          console.log(`🖼️  Image trouvée: ${path.basename(imagePath)}`);
+          console.log(`🖼️  Image principale trouvée: ${path.basename(imagePath)}`);
           imageUrl = await copyImageToUploads(imagePath, productInfo.nom);
           if (imageUrl) {
             console.log(`✅ Image copiée: ${imageUrl}`);
@@ -288,28 +293,41 @@ async function importStocks() {
         }
         console.log(`✅ Produit inséré (ID: ${productId})`);
 
-        // Insérer l'exemplaire
-        console.log(`💾 Insertion de l'exemplaire...`);
-        const exemplaireResult = await insertExemplaire(productInfo.numero_serie, productId);
-        if (!exemplaireResult) {
-          console.log(`❌ Échec de l'insertion de l'exemplaire`);
+        // Insérer les exemplaires selon la quantité spécifiée
+        console.log(`💾 Insertion de ${productInfo.quantite} exemplaire(s)...`);
+        let exemplairesCreated = 0;
+        for (let q = 0; q < productInfo.quantite; q++) {
+          // Générer un numéro de série unique pour chaque exemplaire
+          const serieNumero = q === 0 ? productInfo.numero_serie : 
+            `SN${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}${q}`;
+          
+          const exemplaireResult = await insertExemplaire(serieNumero, productId);
+          if (exemplaireResult) {
+            exemplairesCreated++;
+            console.log(`   ✅ Exemplaire ${q + 1}/${productInfo.quantite} inséré (Série: ${serieNumero})`);
+            
+            // Créer le mouvement d'entrée pour cet exemplaire
+            const mouvementSuccess = await createMouvement(serieNumero);
+            if (!mouvementSuccess) {
+              console.log(`   ⚠️  Échec création mouvement (non critique)`);
+            }
+          } else {
+            console.log(`   ❌ Échec insertion exemplaire ${q + 1}/${productInfo.quantite}`);
+          }
+        }
+
+        if (exemplairesCreated === 0) {
+          console.log(`❌ Aucun exemplaire créé`);
           results.failed++;
-          results.errors.push(`Dossier ${i}: Échec insertion exemplaire`);
+          results.errors.push(`Dossier ${i}: Échec insertion exemplaires`);
           continue;
         }
-        console.log(`✅ Exemplaire inséré (Série: ${productInfo.numero_serie})`);
 
-        // Créer le mouvement d'entrée
-        console.log(`💾 Création du mouvement d'entrée...`);
-        const mouvementSuccess = await createMouvement(productInfo.numero_serie);
-        if (mouvementSuccess) {
-          console.log(`✅ Mouvement créé`);
-        } else {
-          console.log(`⚠️  Échec création mouvement (non critique)`);
-        }
+        console.log(`✅ ${exemplairesCreated} exemplaire(s) créé(s)`);
 
         console.log(`✅ Dossier ${i} traité avec succès`);
         results.success++;
+        results.totalExemplaires += exemplairesCreated;
 
       } catch (error) {
         console.error(`❌ Erreur traitement dossier ${i}:`, error.message);
@@ -327,7 +345,8 @@ async function importStocks() {
   console.log('📊 RAPPORT D\'IMPORTATION');
   console.log('='.repeat(50));
   console.log(`📁 Total dossiers traités: ${results.total}`);
-  console.log(`✅ Importations réussies: ${results.success}`);
+  console.log(`✅ Produits importés: ${results.success}`);
+  console.log(`📦 Total exemplaires créés: ${results.totalExemplaires}`);
   console.log(`❌ Importations échouées: ${results.failed}`);
   console.log(`📈 Taux de réussite: ${((results.success / results.total) * 100).toFixed(1)}%`);
 
