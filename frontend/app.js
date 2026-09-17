@@ -70,6 +70,8 @@ function getStatusBadge(statut) {
 // ============================================
 
 function showTab(tabName) {
+    localStorage.setItem('activeStockTab', tabName);
+
     // Masquer tout le contenu
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.add('hidden');
@@ -1161,8 +1163,8 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', function()
 // ============================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Charger les statistiques du dashboard au démarrage
-    loadDashboardStats();
+    const savedTab = localStorage.getItem('activeStockTab') || 'dashboard';
+    showTab(savedTab);
 
     // Ajouter un écouteur pour la touche Entrée dans la recherche d'historique
     document.getElementById('historiqueNumSerie').addEventListener('keypress', function(e) {
