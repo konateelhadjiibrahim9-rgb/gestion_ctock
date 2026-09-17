@@ -3,6 +3,13 @@ const path = require('path');
 const fs = require('fs').promises;
 const { matchProducts } = require('../services/searchMatcher');
 
+function getDeviceType(type, nom = '', description = '') {
+  if (type === 'Bureau' || type === 'Portable') return type;
+  return /bureau|prodesk|desktop|tour|ordinateur de bureau|all[- ]?in[- ]?one/i.test(`${nom} ${description}`)
+    ? 'Bureau'
+    : 'Portable';
+}
+
 // Fonction utilitaire pour supprimer un fichier de manière sécurisée
 async function deleteImageFile(imageUrl) {
   if (!imageUrl) return;
@@ -127,7 +134,7 @@ exports.matchSearch = async (req, res) => {
 // POST /api/produits - Ajouter un nouveau produit
 exports.createProduit = async (req, res) => {
   try {
-    const { nom, description, prix_achat, prix_vente, images_galerie } = req.body;
+    const { nom, description, prix_achat, prix_vente, images_galerie, type_appareil } = req.body;
     
     if (!nom) {
       return res.status(400).json({ error: 'Le nom du produit est requis' });
@@ -135,6 +142,7 @@ exports.createProduit = async (req, res) => {
 
     const [lastProduct] = await db.query('SELECT COALESCE(MAX(id_produit), 0) + 1 AS next_id FROM produits');
     const code_produit = `PROD-${String(lastProduct[0].next_id).padStart(2, '0')}`;
+    const deviceType = getDeviceType(type_appareil, nom, description);
 
     // Gérer l'image si elle est fournie
     let image_url = null;
@@ -143,14 +151,15 @@ exports.createProduit = async (req, res) => {
     }
 
     const [result] = await db.query(
-      'INSERT INTO produits (code_produit, nom, description, prix_achat, prix_vente, image_url, images_galerie) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [code_produit, nom, description, prix_achat, prix_vente, image_url, images_galerie ? JSON.stringify(images_galerie) : null]
+      'INSERT INTO produits (code_produit, nom, type_appareil, description, prix_achat, prix_vente, image_url, images_galerie) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [code_produit, nom, deviceType, description, prix_achat, prix_vente, image_url, images_galerie ? JSON.stringify(images_galerie) : null]
     );
 
     res.status(201).json({ 
       id_produit: result.insertId, 
       code_produit, 
       nom, 
+      type_appareil: deviceType,
       description, 
       prix_achat, 
       prix_vente,
@@ -167,7 +176,7 @@ exports.createProduit = async (req, res) => {
 exports.updateProduit = async (req, res) => {
   try {
     const { id_produit } = req.params;
-    const { code_produit, nom, description, prix_achat, prix_vente, images_galerie } = req.body;
+    const { code_produit, nom, description, prix_achat, prix_vente, images_galerie, type_appareil } = req.body;
     
     if (!code_produit || !nom) {
       return res.status(400).json({ error: 'Code produit et nom sont requis' });
@@ -192,9 +201,10 @@ exports.updateProduit = async (req, res) => {
     const galleryValue = images_galerie === undefined
       ? existing[0].images_galerie
       : (images_galerie ? JSON.stringify(images_galerie) : null);
+    const deviceType = getDeviceType(type_appareil, nom, description);
     const [result] = await db.query(
-      'UPDATE produits SET code_produit = ?, nom = ?, description = ?, prix_achat = ?, prix_vente = ?, image_url = ?, images_galerie = ? WHERE id_produit = ?',
-      [code_produit, nom, description, prix_achat, prix_vente, image_url, galleryValue, id_produit]
+      'UPDATE produits SET code_produit = ?, nom = ?, type_appareil = ?, description = ?, prix_achat = ?, prix_vente = ?, image_url = ?, images_galerie = ? WHERE id_produit = ?',
+      [code_produit, nom, deviceType, description, prix_achat, prix_vente, image_url, galleryValue, id_produit]
     );
 
     if (result.affectedRows === 0) {
@@ -205,6 +215,7 @@ exports.updateProduit = async (req, res) => {
       id_produit, 
       code_produit, 
       nom, 
+      type_appareil: deviceType,
       description, 
       prix_achat, 
       prix_vente,

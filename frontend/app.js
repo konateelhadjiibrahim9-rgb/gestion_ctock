@@ -500,7 +500,7 @@ async function loadProduits() {
         console.error('Erreur lors du chargement des produits:', error);
         document.getElementById('produitsTableBody').innerHTML = `
             <tr>
-                <td colspan="7" class="px-6 py-8 text-center text-red-500">
+                <td colspan="9" class="px-6 py-8 text-center text-red-500">
                     <i class="fas fa-exclamation-triangle text-2xl mb-2"></i>
                     <p>Erreur de chargement des produits</p>
                 </td>
@@ -512,8 +512,9 @@ async function loadProduits() {
 function filterProduits() {
     const searchInput = document.getElementById('productSearchInput');
     const searchTerm = (searchInput?.value || '').trim().toLowerCase();
+    const typeFilter = document.getElementById('productTypeFilter')?.value || '';
 
-    if (!searchTerm) {
+    if (!searchTerm && !typeFilter) {
         renderProduitsTable(produitsData);
         return;
     }
@@ -525,7 +526,7 @@ function filterProduits() {
             produit.description
         ].filter(Boolean).join(' ').toLowerCase();
 
-        return searchableText.includes(searchTerm);
+        return searchableText.includes(searchTerm) && (!typeFilter || produit.type_appareil === typeFilter);
     });
 
     renderProduitsTable(filteredProduits);
@@ -618,7 +619,7 @@ function renderProduitsTable(produits) {
     if (produits.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="8" class="px-6 py-8 text-center text-gray-500">
+                <td colspan="9" class="px-6 py-8 text-center text-gray-500">
                     <i class="fas fa-box-open text-4xl mb-2"></i>
                     <p>Aucun produit trouvé</p>
                 </td>
@@ -642,6 +643,11 @@ function renderProduitsTable(produits) {
             </td>
             <td class="px-6 py-4 whitespace-nowrap">
                 <span class="text-sm font-medium text-gray-900">${produit.nom}</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${produit.type_appareil === 'Bureau' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}">
+                    <i class="fas ${produit.type_appareil === 'Bureau' ? 'fa-desktop' : 'fa-laptop'} mr-1"></i>${produit.type_appareil || 'Portable'}
+                </span>
             </td>
             <td class="px-6 py-4">
                 <p class="product-description text-sm text-gray-600 whitespace-pre-line break-words leading-relaxed" title="${produit.description || 'N/A'}">${produit.description || 'N/A'}</p>
@@ -732,6 +738,7 @@ function openAddProductModal() {
     document.getElementById('productModalTitle').textContent = 'Ajouter un Produit';
     document.getElementById('productForm').reset();
     document.getElementById('productId').value = '';
+    document.getElementById('productType').value = 'Portable';
     document.getElementById('imagePreview').classList.add('hidden');
     document.getElementById('productGallery').classList.add('hidden');
     document.getElementById('productGalleryGrid').innerHTML = '';
@@ -747,6 +754,7 @@ function editProduct(id) {
     document.getElementById('productId').value = produit.id_produit;
     document.getElementById('productCode').value = produit.code_produit;
     document.getElementById('productName').value = produit.nom;
+    document.getElementById('productType').value = produit.type_appareil || 'Portable';
     document.getElementById('productDescription').value = produit.description || '';
     document.getElementById('productPrixAchat').value = produit.prix_achat || '';
     document.getElementById('productPrixVente').value = produit.prix_vente || '';
@@ -960,6 +968,7 @@ async function saveProduct(event) {
     const formData = new FormData();
     formData.append('code_produit', document.getElementById('productCode').value);
     formData.append('nom', document.getElementById('productName').value);
+    formData.append('type_appareil', document.getElementById('productType').value);
     formData.append('description', document.getElementById('productDescription').value);
     formData.append('prix_achat', parseFloat(document.getElementById('productPrixAchat').value) || 0);
     formData.append('prix_vente', parseFloat(document.getElementById('productPrixVente').value) || 0);
