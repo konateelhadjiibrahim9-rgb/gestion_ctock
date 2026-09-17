@@ -67,9 +67,23 @@ function extractSpecs(text = '') {
 }
 
 function splitQueries(text = '') {
-  const blocks = String(text).split(/\n\s*\n/).map(block => block.trim()).filter(Boolean);
-  if (blocks.length > 1) return blocks;
-  return String(text).split(/\r?\n/).map(line => line.trim()).filter(line => line.length >= 8);
+  const lines = String(text)
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+  const queries = [];
+  let current = [];
+
+  for (const line of lines) {
+    current.push(line);
+    if (/\b(prix|promo|price)\b/i.test(line) || /\b\d{2,3}[ .]\d{3}\s*(?:f|fr|fcfa|xof)?\b/i.test(line)) {
+      queries.push(current.join('\n'));
+      current = [];
+    }
+  }
+
+  if (current.length > 0) queries.push(current.join('\n'));
+  return queries.length > 0 ? queries : [String(text).trim()];
 }
 
 function scoreProduct(querySpecs, product) {
@@ -101,7 +115,22 @@ function scoreProduct(querySpecs, product) {
   let percentage = Math.round((score / available.length) * 100);
   const exact = available.length >= 3 && matched === available.length;
   if (!exact && matched > 0 && querySpecs.processor && productSpecs.processor) percentage = Math.max(70, Math.min(90, percentage));
+  if (!exact && percentage === 100) percentage = 90;
   return { score: exact ? 100 : percentage, productSpecs };
+}
+
+function productKey(product) {
+  return normalize(product.nom || product.code_produit);
+}
+
+function uniqueByProduct(items) {
+  const seen = new Set();
+  return items.filter(item => {
+    const key = productKey(item.product);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function matchProducts(text, products) {
@@ -113,8 +142,8 @@ function matchProducts(text, products) {
       .sort((a, b) => b.score - a.score || Number(a.product.prix_vente || 0) - Number(b.product.prix_vente || 0));
 
     const exactItem = ranked.find(item => item.score === 100);
-    const alternatives = ranked
-      .filter(item => !exactItem || item.product.id_produit !== exactItem.product.id_produit)
+    const alternatives = uniqueByProduct(ranked
+      .filter(item => !exactItem || productKey(item.product) !== productKey(exactItem.product)))
       .slice(0, 3)
       .map(item => ({ ...item.product, score: item.score }));
 
