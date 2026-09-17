@@ -10,12 +10,19 @@ async function ensureTenCopiesPerProduct() {
 
     for (const product of products) {
       const [countRows] = await connection.query(
-        'SELECT COUNT(*) AS total FROM exemplaires WHERE id_produit = ?',
+        "SELECT COUNT(*) AS total FROM exemplaires WHERE id_produit = ? AND statut = 'En stock'",
         [product.id_produit]
       );
       const missing = Math.max(0, 10 - Number(countRows[0].total));
       for (let index = 0; index < missing; index++) {
-        const serial = `${product.code_produit}-SN-${String(Number(countRows[0].total) + index + 1).padStart(2, '0')}`;
+        let serial;
+        let serialIndex = Number(countRows[0].total) + index + 1;
+        do {
+          serial = `${product.code_produit}-SN-${String(serialIndex).padStart(2, '0')}`;
+          const [existing] = await connection.query('SELECT 1 FROM exemplaires WHERE num_serie = ?', [serial]);
+          if (existing.length === 0) break;
+          serialIndex++;
+        } while (true);
         await connection.query(
           "INSERT INTO exemplaires (num_serie, id_produit, statut, etat_physique) VALUES (?, ?, 'En stock', 'Bon état')",
           [serial, product.id_produit]
