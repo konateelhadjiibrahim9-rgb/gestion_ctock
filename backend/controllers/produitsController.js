@@ -59,6 +59,42 @@ exports.getProduitById = async (req, res) => {
   }
 };
 
+// DELETE /api/produits/:id_produit/images - Supprimer une image de galerie
+exports.removeGalleryImage = async (req, res) => {
+  try {
+    const { id_produit } = req.params;
+    const { image_url } = req.body;
+    if (!image_url) return res.status(400).json({ error: 'URL de l’image requise' });
+
+    const [rows] = await db.query(
+      'SELECT image_url, images_galerie FROM produits WHERE id_produit = ?',
+      [id_produit]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Produit non trouvé' });
+
+    const currentGallery = rows[0].images_galerie
+      ? (typeof rows[0].images_galerie === 'string' ? JSON.parse(rows[0].images_galerie) : rows[0].images_galerie)
+      : [];
+    const gallery = currentGallery.filter(image => image !== image_url);
+    const wasMainImage = rows[0].image_url === image_url;
+    if (!wasMainImage && gallery.length === currentGallery.length) {
+      return res.status(404).json({ error: 'Image non trouvée dans la galerie' });
+    }
+
+    const nextMainImage = wasMainImage ? (gallery[0] || null) : rows[0].image_url;
+    await db.query(
+      'UPDATE produits SET image_url = ?, images_galerie = ? WHERE id_produit = ?',
+      [nextMainImage, gallery.length ? JSON.stringify(gallery) : null, id_produit]
+    );
+    await deleteImageFile(image_url);
+
+    res.json({ image_url: nextMainImage, images_galerie: gallery });
+  } catch (error) {
+    console.error('Erreur lors de la suppression de l’image:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+};
+
 // POST /api/produits/match-search - Rechercher des produits depuis un listing libre
 exports.matchSearch = async (req, res) => {
   try {
@@ -138,7 +174,7 @@ exports.updateProduit = async (req, res) => {
     }
 
     // Vérifier si le produit existe
-    const [existing] = await db.query('SELECT id_produit, image_url FROM produits WHERE id_produit = ?', [id_produit]);
+    const [existing] = await db.query('SELECT id_produit, image_url, images_galerie FROM produits WHERE id_produit = ?', [id_produit]);
     if (existing.length === 0) {
       return res.status(404).json({ error: 'Produit non trouvé' });
     }
@@ -153,9 +189,12 @@ exports.updateProduit = async (req, res) => {
       image_url = `/uploads/${req.file.filename}`;
     }
 
+    const galleryValue = images_galerie === undefined
+      ? existing[0].images_galerie
+      : (images_galerie ? JSON.stringify(images_galerie) : null);
     const [result] = await db.query(
       'UPDATE produits SET code_produit = ?, nom = ?, description = ?, prix_achat = ?, prix_vente = ?, image_url = ?, images_galerie = ? WHERE id_produit = ?',
-      [code_produit, nom, description, prix_achat, prix_vente, image_url, images_galerie ? JSON.stringify(images_galerie) : null, id_produit]
+      [code_produit, nom, description, prix_achat, prix_vente, image_url, galleryValue, id_produit]
     );
 
     if (result.affectedRows === 0) {

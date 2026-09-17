@@ -5,6 +5,9 @@ const produitsController = require('../controllers/produitsController');
 // GET /api/produits - Lister tous les produits
 router.get('/', produitsController.getAllProduits);
 
+// DELETE /api/produits/:id_produit/images - Supprimer une image de galerie
+router.delete('/:id_produit/images', produitsController.removeGalleryImage);
+
 // GET /api/produits/:id_produit - Obtenir un produit spécifique
 router.get('/:id_produit', produitsController.getProduitById);
 

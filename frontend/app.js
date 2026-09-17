@@ -731,6 +731,8 @@ function openAddProductModal() {
     document.getElementById('productForm').reset();
     document.getElementById('productId').value = '';
     document.getElementById('imagePreview').classList.add('hidden');
+    document.getElementById('productGallery').classList.add('hidden');
+    document.getElementById('productGalleryGrid').innerHTML = '';
     document.getElementById('productModal').classList.remove('hidden');
     document.getElementById('productModal').classList.add('flex');
 }
@@ -750,6 +752,7 @@ function editProduct(id) {
     // Réinitialiser l'aperçu d'image
     document.getElementById('imagePreview').classList.add('hidden');
     document.getElementById('productImage').value = '';
+    renderProductGallery(produit);
 
     // Afficher l'image existante si disponible
     if (produit.image_url) {
@@ -763,11 +766,79 @@ function editProduct(id) {
     document.getElementById('productModal').classList.add('flex');
 }
 
+function getProductGallery(produit) {
+    let gallery = [];
+    if (produit.images_galerie) {
+        try {
+            gallery = Array.isArray(produit.images_galerie)
+                ? produit.images_galerie
+                : JSON.parse(produit.images_galerie);
+        } catch (error) {
+            console.error('Erreur parsing galerie:', error);
+        }
+    }
+    if (!gallery.length && produit.image_url) gallery = [produit.image_url];
+    return gallery;
+}
+
+function renderProductGallery(produit) {
+    const gallery = getProductGallery(produit);
+    const galleryContainer = document.getElementById('productGallery');
+    const galleryGrid = document.getElementById('productGalleryGrid');
+    if (!gallery.length) {
+        galleryContainer.classList.add('hidden');
+        galleryGrid.innerHTML = '';
+        return;
+    }
+
+    galleryContainer.classList.remove('hidden');
+    galleryGrid.innerHTML = gallery.map((imageUrl, index) => `
+        <div class="relative group">
+            <img src="http://localhost:3000${imageUrl}" alt="Image ${index + 1}" class="w-full aspect-square object-cover rounded-lg border border-gray-200">
+            <button type="button" onclick="removeProductGalleryImage(${produit.id_produit}, '${imageUrl}')"
+                    class="absolute top-2 right-2 w-8 h-8 rounded-full bg-red-600 text-white opacity-90 hover:bg-red-700"
+                    title="Supprimer cette image">
+                <i class="fas fa-trash text-xs"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+async function removeProductGalleryImage(id, imageUrl) {
+    if (!window.confirm('Supprimer cette image de la galerie ?')) return;
+
+    try {
+        const response = await apiCall(`/produits/${id}/images`, {
+            method: 'DELETE',
+            body: JSON.stringify({ image_url: imageUrl })
+        });
+        const produit = produitsData.find(product => product.id_produit === id);
+        if (produit) {
+            produit.image_url = response.image_url;
+            produit.images_galerie = response.images_galerie;
+            renderProductGallery(produit);
+            const preview = document.getElementById('imagePreview');
+            const previewImage = document.getElementById('imagePreviewImg');
+            if (produit.image_url) {
+                previewImage.src = `http://localhost:3000${produit.image_url}`;
+                preview.classList.remove('hidden');
+            } else {
+                preview.classList.add('hidden');
+            }
+        }
+        showToast('Image supprimée de la galerie');
+    } catch (error) {
+        showToast(error.message || 'Impossible de supprimer cette image', 'error');
+    }
+}
+
 function closeProductModal() {
     document.getElementById('productModal').classList.add('hidden');
     document.getElementById('productModal').classList.remove('flex');
     document.getElementById('imagePreview').classList.add('hidden');
     document.getElementById('productImage').value = '';
+    document.getElementById('productGallery').classList.add('hidden');
+    document.getElementById('productGalleryGrid').innerHTML = '';
 }
 
 function showProductDetails(id) {
