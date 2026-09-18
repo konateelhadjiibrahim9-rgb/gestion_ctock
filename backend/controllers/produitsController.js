@@ -225,9 +225,11 @@ exports.updateProduit = async (req, res) => {
     const nextGallery = [...currentGallery, ...uploadedImages];
     if (!image_url && uploadedImages.length) image_url = uploadedImages[0];
 
-    const galleryValue = uploadedImages.length || images_galerie !== undefined
-      ? JSON.stringify(uploadedImages.length ? nextGallery : images_galerie)
-      : existing[0].images_galerie;
+    const requestedGallery = images_galerie === undefined
+      ? currentGallery
+      : (typeof images_galerie === 'string' ? JSON.parse(images_galerie) : images_galerie);
+    const finalGallery = uploadedImages.length ? nextGallery : (requestedGallery || []);
+    const galleryValue = finalGallery.length ? JSON.stringify(finalGallery) : null;
     const deviceType = getDeviceType(type_appareil, nom, description);
     const [result] = await connection.query(
       'UPDATE produits SET code_produit = ?, nom = ?, type_appareil = ?, description = ?, prix_achat = ?, prix_vente = ?, image_url = ?, images_galerie = ? WHERE id_produit = ?',
@@ -279,7 +281,7 @@ exports.updateProduit = async (req, res) => {
       prix_achat, 
       prix_vente,
       image_url,
-      images_galerie,
+      images_galerie: finalGallery,
       quantite: quantity,
       etat_physique: physicalState
     });
