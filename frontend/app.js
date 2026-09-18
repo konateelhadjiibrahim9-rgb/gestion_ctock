@@ -101,6 +101,11 @@ function showTab(tabName) {
     }
 }
 
+function openProductFromStock() {
+    showTab('produits');
+    openAddProductModal();
+}
+
 // ============================================
 // API CALLS
 // ============================================
