@@ -133,14 +133,17 @@ exports.matchSearch = async (req, res) => {
 
 // POST /api/produits - Ajouter un nouveau produit
 exports.createProduit = async (req, res) => {
+  const connection = await db.getConnection();
   try {
     const { nom, description, prix_achat, prix_vente, images_galerie, type_appareil } = req.body;
+    const quantity = Math.max(1, Math.min(1000, Number.parseInt(req.body.quantite, 10) || 1));
     
     if (!nom) {
       return res.status(400).json({ error: 'Le nom du produit est requis' });
     }
 
-    const [lastProduct] = await db.query('SELECT COALESCE(MAX(id_produit), 0) + 1 AS next_id FROM produits');
+    await connection.beginTransaction();
+    const [lastProduct] = await connection.query('SELECT COALESCE(MAX(id_produit), 0) + 1 AS next_id FROM produits');
     const code_produit = `PROD-${String(lastProduct[0].next_id).padStart(2, '0')}`;
     const deviceType = getDeviceType(type_appareil, nom, description);
 
@@ -148,10 +151,24 @@ exports.createProduit = async (req, res) => {
     const image_url = uploadedImages[0] || null;
     const gallery = uploadedImages.length ? uploadedImages : null;
 
-    const [result] = await db.query(
+    const [result] = await connection.query(
       'INSERT INTO produits (code_produit, nom, type_appareil, description, prix_achat, prix_vente, image_url, images_galerie) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [code_produit, nom, deviceType, description, prix_achat, prix_vente, image_url, gallery ? JSON.stringify(gallery) : (images_galerie ? JSON.stringify(images_galerie) : null)]
     );
+
+    for (let index = 1; index <= quantity; index++) {
+      const serial = `${code_produit}-SN-${String(index).padStart(2, '0')}`;
+      await connection.query(
+        "INSERT INTO exemplaires (num_serie, id_produit, statut, etat_physique) VALUES (?, ?, 'En stock', 'Bon état')",
+        [serial, result.insertId]
+      );
+      await connection.query(
+        "INSERT INTO mouvements_stock (num_serie, type_mouvement, commentaire) VALUES (?, 'Entrée', 'Création du produit avec stock initial')",
+        [serial]
+      );
+    }
+
+    await connection.commit();
 
     res.status(201).json({ 
       id_produit: result.insertId, 
@@ -162,11 +179,15 @@ exports.createProduit = async (req, res) => {
       prix_achat, 
       prix_vente,
       image_url,
-      images_galerie: gallery || images_galerie || []
+      images_galerie: gallery || images_galerie || [],
+      quantite: quantity
     });
   } catch (error) {
+    await connection.rollback();
     console.error('Erreur lors de la création du produit:', error);
     res.status(500).json({ error: 'Erreur serveur' });
+  } finally {
+    connection.release();
   }
 };
 
