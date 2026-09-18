@@ -747,6 +747,7 @@ function openAddProductModal() {
     document.getElementById('productQuantity').value = 1;
     document.getElementById('productQuantity').disabled = false;
     document.getElementById('productQuantityHint').textContent = 'Nombre d’exemplaires créés à l’ajout.';
+    document.getElementById('productPhysicalState').value = 'Bon état';
     document.getElementById('imagePreview').classList.add('hidden');
     document.getElementById('selectedImagesPreview').classList.add('hidden');
     document.getElementById('selectedImagesGrid').innerHTML = '';
@@ -766,8 +767,9 @@ function editProduct(id) {
     document.getElementById('productName').value = produit.nom;
     document.getElementById('productType').value = produit.type_appareil || 'Portable';
     document.getElementById('productQuantity').value = produit.stock_disponible || 0;
-    document.getElementById('productQuantity').disabled = true;
-    document.getElementById('productQuantityHint').textContent = 'La quantité existante se gère depuis l’onglet Stock.';
+    document.getElementById('productQuantity').disabled = false;
+    document.getElementById('productQuantityHint').textContent = 'La quantité modifie le nombre d’exemplaires en stock.';
+    document.getElementById('productPhysicalState').value = produit.etat_physique || 'Bon état';
     document.getElementById('productDescription').value = produit.description || '';
     document.getElementById('productPrixAchat').value = produit.prix_achat || '';
     document.getElementById('productPrixVente').value = produit.prix_vente || '';
@@ -985,6 +987,7 @@ async function saveProduct(event) {
     formData.append('nom', document.getElementById('productName').value);
     formData.append('type_appareil', document.getElementById('productType').value);
     formData.append('quantite', document.getElementById('productQuantity').value);
+    formData.append('etat_physique', document.getElementById('productPhysicalState').value);
     formData.append('description', document.getElementById('productDescription').value);
     formData.append('prix_achat', parseFloat(document.getElementById('productPrixAchat').value) || 0);
     formData.append('prix_vente', parseFloat(document.getElementById('productPrixVente').value) || 0);

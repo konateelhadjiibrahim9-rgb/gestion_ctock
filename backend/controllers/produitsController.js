@@ -36,6 +36,7 @@ exports.getAllProduits = async (req, res) => {
   try {
     const [rows] = await db.query(`
       SELECT p.*, COUNT(CASE WHEN e.statut = 'En stock' THEN 1 END) AS stock_disponible
+              , MIN(CASE WHEN e.statut = 'En stock' THEN e.etat_physique END) AS etat_physique
       FROM produits p
       LEFT JOIN exemplaires e ON e.id_produit = p.id_produit
       GROUP BY p.id_produit
@@ -135,8 +136,9 @@ exports.matchSearch = async (req, res) => {
 exports.createProduit = async (req, res) => {
   const connection = await db.getConnection();
   try {
-    const { nom, description, prix_achat, prix_vente, images_galerie, type_appareil } = req.body;
+    const { nom, description, prix_achat, prix_vente, images_galerie, type_appareil, etat_physique } = req.body;
     const quantity = Math.max(1, Math.min(1000, Number.parseInt(req.body.quantite, 10) || 1));
+    const physicalState = etat_physique || 'Bon état';
     
     if (!nom) {
       return res.status(400).json({ error: 'Le nom du produit est requis' });
@@ -159,8 +161,8 @@ exports.createProduit = async (req, res) => {
     for (let index = 1; index <= quantity; index++) {
       const serial = `${code_produit}-SN-${String(index).padStart(2, '0')}`;
       await connection.query(
-        "INSERT INTO exemplaires (num_serie, id_produit, statut, etat_physique) VALUES (?, ?, 'En stock', 'Bon état')",
-        [serial, result.insertId]
+        "INSERT INTO exemplaires (num_serie, id_produit, statut, etat_physique) VALUES (?, ?, 'En stock', ?)",
+        [serial, result.insertId, physicalState]
       );
       await connection.query(
         "INSERT INTO mouvements_stock (num_serie, type_mouvement, commentaire) VALUES (?, 'Entrée', 'Création du produit avec stock initial')",
@@ -180,7 +182,8 @@ exports.createProduit = async (req, res) => {
       prix_vente,
       image_url,
       images_galerie: gallery || images_galerie || [],
-      quantite: quantity
+      quantite: quantity,
+      etat_physique: physicalState
     });
   } catch (error) {
     await connection.rollback();
@@ -193,17 +196,22 @@ exports.createProduit = async (req, res) => {
 
 // PUT /api/produits/:id_produit - Modifier un produit
 exports.updateProduit = async (req, res) => {
+  const connection = await db.getConnection();
   try {
     const { id_produit } = req.params;
-    const { code_produit, nom, description, prix_achat, prix_vente, images_galerie, type_appareil } = req.body;
+    const { code_produit, nom, description, prix_achat, prix_vente, images_galerie, type_appareil, etat_physique } = req.body;
+    const quantity = Math.max(0, Math.min(1000, Number.parseInt(req.body.quantite, 10) || 0));
+    const physicalState = etat_physique || 'Bon état';
     
     if (!code_produit || !nom) {
       return res.status(400).json({ error: 'Code produit et nom sont requis' });
     }
 
     // Vérifier si le produit existe
-    const [existing] = await db.query('SELECT id_produit, image_url, images_galerie FROM produits WHERE id_produit = ?', [id_produit]);
+    await connection.beginTransaction();
+    const [existing] = await connection.query('SELECT id_produit, image_url, images_galerie FROM produits WHERE id_produit = ?', [id_produit]);
     if (existing.length === 0) {
+      await connection.rollback();
       return res.status(404).json({ error: 'Produit non trouvé' });
     }
 
@@ -221,14 +229,46 @@ exports.updateProduit = async (req, res) => {
       ? JSON.stringify(uploadedImages.length ? nextGallery : images_galerie)
       : existing[0].images_galerie;
     const deviceType = getDeviceType(type_appareil, nom, description);
-    const [result] = await db.query(
+    const [result] = await connection.query(
       'UPDATE produits SET code_produit = ?, nom = ?, type_appareil = ?, description = ?, prix_achat = ?, prix_vente = ?, image_url = ?, images_galerie = ? WHERE id_produit = ?',
       [code_produit, nom, deviceType, description, prix_achat, prix_vente, image_url, galleryValue, id_produit]
     );
 
     if (result.affectedRows === 0) {
+      await connection.rollback();
       return res.status(404).json({ error: 'Produit non trouvé' });
     }
+
+    const [stockRows] = await connection.query(
+      "SELECT num_serie FROM exemplaires WHERE id_produit = ? AND statut = 'En stock' ORDER BY num_serie",
+      [id_produit]
+    );
+    await connection.query(
+      "UPDATE exemplaires SET etat_physique = ? WHERE id_produit = ? AND statut = 'En stock'",
+      [physicalState, id_produit]
+    );
+    if (quantity > stockRows.length) {
+      for (let index = stockRows.length + 1; index <= quantity; index++) {
+        const serial = `${code_produit}-SN-${String(index).padStart(2, '0')}`;
+        const [serialCheck] = await connection.query('SELECT num_serie FROM exemplaires WHERE num_serie = ?', [serial]);
+        if (serialCheck.length > 0) continue;
+        await connection.query(
+          "INSERT INTO exemplaires (num_serie, id_produit, statut, etat_physique) VALUES (?, ?, 'En stock', ?)",
+          [serial, id_produit, physicalState]
+        );
+        await connection.query(
+          "INSERT INTO mouvements_stock (num_serie, type_mouvement, commentaire) VALUES (?, 'Entrée', 'Augmentation du stock depuis la modification du produit')",
+          [serial]
+        );
+      }
+    } else if (quantity < stockRows.length) {
+      const toRemove = stockRows.slice(quantity);
+      for (const stockItem of toRemove) {
+        await connection.query('DELETE FROM mouvements_stock WHERE num_serie = ?', [stockItem.num_serie]);
+        await connection.query('DELETE FROM exemplaires WHERE num_serie = ?', [stockItem.num_serie]);
+      }
+    }
+    await connection.commit();
 
     res.json({ 
       id_produit, 
@@ -239,11 +279,16 @@ exports.updateProduit = async (req, res) => {
       prix_achat, 
       prix_vente,
       image_url,
-      images_galerie
+      images_galerie,
+      quantite: quantity,
+      etat_physique: physicalState
     });
   } catch (error) {
+    await connection.rollback();
     console.error('Erreur lors de la modification du produit:', error);
     res.status(500).json({ error: 'Erreur serveur' });
+  } finally {
+    connection.release();
   }
 };
 
