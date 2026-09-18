@@ -144,15 +144,13 @@ exports.createProduit = async (req, res) => {
     const code_produit = `PROD-${String(lastProduct[0].next_id).padStart(2, '0')}`;
     const deviceType = getDeviceType(type_appareil, nom, description);
 
-    // Gérer l'image si elle est fournie
-    let image_url = null;
-    if (req.file) {
-      image_url = `/uploads/${req.file.filename}`;
-    }
+    const uploadedImages = (req.files || []).map(file => `/uploads/${file.filename}`);
+    const image_url = uploadedImages[0] || null;
+    const gallery = uploadedImages.length ? uploadedImages : null;
 
     const [result] = await db.query(
       'INSERT INTO produits (code_produit, nom, type_appareil, description, prix_achat, prix_vente, image_url, images_galerie) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [code_produit, nom, deviceType, description, prix_achat, prix_vente, image_url, images_galerie ? JSON.stringify(images_galerie) : null]
+      [code_produit, nom, deviceType, description, prix_achat, prix_vente, image_url, gallery ? JSON.stringify(gallery) : (images_galerie ? JSON.stringify(images_galerie) : null)]
     );
 
     res.status(201).json({ 
@@ -164,7 +162,7 @@ exports.createProduit = async (req, res) => {
       prix_achat, 
       prix_vente,
       image_url,
-      images_galerie
+      images_galerie: gallery || images_galerie || []
     });
   } catch (error) {
     console.error('Erreur lors de la création du produit:', error);
@@ -188,19 +186,19 @@ exports.updateProduit = async (req, res) => {
       return res.status(404).json({ error: 'Produit non trouvé' });
     }
 
-    // Gérer l'image si elle est fournie
-    let image_url = existing[0].image_url; // Conserver l'ancienne image par défaut
-    if (req.file) {
-      // Supprimer l'ancienne image si elle existe et est différente de la nouvelle
-      if (existing[0].image_url && existing[0].image_url !== `/uploads/${req.file.filename}`) {
-        await deleteImageFile(existing[0].image_url);
-      }
-      image_url = `/uploads/${req.file.filename}`;
-    }
+    const uploadedImages = (req.files || []).map(file => `/uploads/${file.filename}`);
+    const currentGallery = existing[0].images_galerie
+      ? (typeof existing[0].images_galerie === 'string' ? JSON.parse(existing[0].images_galerie) : existing[0].images_galerie)
+      : (existing[0].image_url ? [existing[0].image_url] : []);
 
-    const galleryValue = images_galerie === undefined
-      ? existing[0].images_galerie
-      : (images_galerie ? JSON.stringify(images_galerie) : null);
+    // Ajouter les nouvelles images à la galerie existante.
+    let image_url = existing[0].image_url; // Conserver l'ancienne image par défaut
+    const nextGallery = [...currentGallery, ...uploadedImages];
+    if (!image_url && uploadedImages.length) image_url = uploadedImages[0];
+
+    const galleryValue = uploadedImages.length || images_galerie !== undefined
+      ? JSON.stringify(uploadedImages.length ? nextGallery : images_galerie)
+      : existing[0].images_galerie;
     const deviceType = getDeviceType(type_appareil, nom, description);
     const [result] = await db.query(
       'UPDATE produits SET code_produit = ?, nom = ?, type_appareil = ?, description = ?, prix_achat = ?, prix_vente = ?, image_url = ?, images_galerie = ? WHERE id_produit = ?',

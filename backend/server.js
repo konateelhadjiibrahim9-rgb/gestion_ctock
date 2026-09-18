@@ -53,8 +53,8 @@ app.get('/api/produits', produitsController.getAllProduits);
 app.get('/api/produits/:id_produit', produitsController.getProduitById);
 app.post('/api/produits/match-search', produitsController.matchSearch);
 app.delete('/api/produits/:id_produit/images', produitsController.removeGalleryImage);
-app.post('/api/produits', upload.single('image'), produitsController.createProduit);
-app.put('/api/produits/:id_produit', upload.single('image'), produitsController.updateProduit);
+app.post('/api/produits', upload.array('images', 20), produitsController.createProduit);
+app.put('/api/produits/:id_produit', upload.array('images', 20), produitsController.updateProduit);
 app.delete('/api/produits/:id_produit', produitsController.deleteProduit);
 
 app.use('/api/exemplaires', require('./routes/exemplaires'));

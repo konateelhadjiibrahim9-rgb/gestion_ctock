@@ -740,6 +740,8 @@ function openAddProductModal() {
     document.getElementById('productId').value = '';
     document.getElementById('productType').value = 'Portable';
     document.getElementById('imagePreview').classList.add('hidden');
+    document.getElementById('selectedImagesPreview').classList.add('hidden');
+    document.getElementById('selectedImagesGrid').innerHTML = '';
     document.getElementById('productGallery').classList.add('hidden');
     document.getElementById('productGalleryGrid').innerHTML = '';
     document.getElementById('productModal').classList.remove('hidden');
@@ -762,6 +764,8 @@ function editProduct(id) {
     // Réinitialiser l'aperçu d'image
     document.getElementById('imagePreview').classList.add('hidden');
     document.getElementById('productImage').value = '';
+    document.getElementById('selectedImagesPreview').classList.add('hidden');
+    document.getElementById('selectedImagesGrid').innerHTML = '';
     renderProductGallery(produit);
 
     // Afficher l'image existante si disponible
@@ -962,7 +966,7 @@ async function saveProduct(event) {
     event.preventDefault();
 
     const id = document.getElementById('productId').value;
-    const imageFile = document.getElementById('productImage').files[0];
+    const imageFiles = Array.from(document.getElementById('productImage').files);
 
     // Créer FormData pour gérer l'upload de fichier
     const formData = new FormData();
@@ -973,10 +977,7 @@ async function saveProduct(event) {
     formData.append('prix_achat', parseFloat(document.getElementById('productPrixAchat').value) || 0);
     formData.append('prix_vente', parseFloat(document.getElementById('productPrixVente').value) || 0);
 
-    // Ajouter l'image si elle est fournie
-    if (imageFile) {
-        formData.append('image', imageFile);
-    }
+    imageFiles.forEach(imageFile => formData.append('images', imageFile));
 
     try {
         if (id) {
@@ -1188,18 +1189,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Écouteur pour l'aperçu de l'image du produit
     document.getElementById('productImage').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
+        const files = Array.from(e.target.files);
+        const preview = document.getElementById('selectedImagesPreview');
+        const count = document.getElementById('selectedImagesCount');
+        const grid = document.getElementById('selectedImagesGrid');
+        if (!files.length) {
+            preview.classList.add('hidden');
+            grid.innerHTML = '';
+            return;
+        }
+        count.textContent = `${files.length} image(s) sélectionnée(s)`;
+        grid.innerHTML = '';
+        preview.classList.remove('hidden');
+        files.forEach(file => {
             const reader = new FileReader();
-            reader.onload = function(e) {
-                const imagePreview = document.getElementById('imagePreview');
-                const imagePreviewImg = document.getElementById('imagePreviewImg');
-                imagePreviewImg.src = e.target.result;
-                imagePreview.classList.remove('hidden');
+            reader.onload = event => {
+                grid.insertAdjacentHTML('beforeend', `<img src="${event.target.result}" alt="Aperçu" class="w-full aspect-square object-cover rounded-lg border border-gray-200">`);
             };
             reader.readAsDataURL(file);
-        } else {
-            document.getElementById('imagePreview').classList.add('hidden');
-        }
+        });
     });
 });
